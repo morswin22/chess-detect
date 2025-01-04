@@ -82,6 +82,9 @@ def find_squares(image):
 
     return square_centers, marks
 
+def lerp(a, b, t):
+    return a + (b - a) * t
+
 stop = False
 while not stop:
     ret, frame = capture.read()
@@ -91,7 +94,7 @@ while not stop:
         break
 
     gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    rgb_image  = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    bgr_image  = frame.copy()
 
     # Blur
     blur_image = cv2.GaussianBlur(gray_image, (5, 5), 0)
@@ -138,7 +141,59 @@ while not stop:
     # Filter squares that are outside the biggest contour
     inside_squares=[square for square in square_centers if cv2.pointPolygonTest(largest_contour, (square[0], square[1]), measureDist=False) >= 0]
 
-    cv2.imshow("Live Stream", biggest_area_image)
+    # Sort squares
+    sorted_coordinates = sorted(inside_squares, key=lambda x: x[1], reverse=True)
+    current_group = [sorted_coordinates[0]]
+    groups = list()
+
+    for coord in sorted_coordinates[1:]:
+        if abs(coord[1] - current_group[-1][1]) < 50: # y_error_threshold
+            current_group.append(coord)
+        else:
+            groups.append(current_group)
+            current_group = [coord]
+    groups.append(current_group)
+
+    for group in groups:
+        group.sort(key=lambda x: x[0])
+
+    sorted_coordinates = [coord for group in groups for coord in group]
+
+    dxs = list()
+    for i in range(len(sorted_coordinates) - 1):
+        x1, y1, *_ = sorted_coordinates[i]
+        x2, y2, *_ = sorted_coordinates[i+1]
+        dx = x2 - x1
+        if dx < 0:
+            continue
+        dxs.append(dx)
+
+    x_gap = np.median(dxs)
+
+    # Fill missing squares
+    for i in range(len(sorted_coordinates) - 1, 1, -1):
+        x1, y1, *_ = sorted_coordinates[i-1]
+        x2, y2, *_ = sorted_coordinates[i]
+        dx = x2 - x1
+        if dx < x_gap*1.5:
+            continue
+        squares_missing = dx // x_gap
+        for j in range(int(squares_missing)):
+            t = (j+1) / (squares_missing+1)
+            sorted_coordinates.insert(i, (lerp(x1, x2, t), lerp(y1, y2, t)))
+
+    # Display squares
+    for index, coord in enumerate(sorted_coordinates):
+        x, y = coord[0], coord[1]
+
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.5
+        color = (0, 0, 255)
+        thickness = 2
+
+        cv2.putText(bgr_image, str(index), np.array((x, y), np.uint), font, font_scale, color, thickness)
+
+    cv2.imshow("Live Stream", bgr_image)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         stop = True
