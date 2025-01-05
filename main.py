@@ -132,6 +132,9 @@ while not stop:
     # Look for larges contour (whole board)
     contours, _ = cv2.findContours(square_marks_dilation, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
+    if len(contours) == 0:
+        continue
+
     largest_contour = max(contours, key=cv2.contourArea)
 
     biggest_area_image = np.zeros_like(square_marks_dilation)
@@ -169,6 +172,8 @@ while not stop:
         dxs.append(dx)
 
     x_gap = np.median(dxs)
+    if math.isnan(x_gap) or int(x_gap) == 0:
+        continue
 
     # Fill missing squares
     for i in range(len(sorted_coordinates) - 1, 1, -1):
