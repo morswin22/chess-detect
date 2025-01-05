@@ -99,11 +99,11 @@ while not stop:
     # Blur
     blur_image = cv2.GaussianBlur(gray_image, (5, 5), 0)
 
-    # OTSU tresholding
-    ret, otsu_binary = cv2.threshold(blur_image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    # Binary tresholding
+    binary_image = cv2.adaptiveThreshold(blur_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
 
     # Closing
-    closed_image = cv2.morphologyEx(otsu_binary, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5)))
+    closed_image = cv2.morphologyEx(binary_binary, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)))
 
     # Canny edge detection
     canny = cv2.Canny(closed_image, 20, 255)
@@ -112,7 +112,7 @@ while not stop:
     img_dilation = cv2.dilate(canny, np.ones((7,7), np.uint8), iterations=1)
 
     # Hough Lines
-    lines = cv2.HoughLinesP(img_dilation, 1, np.pi / 180, threshold=200, minLineLength=150, maxLineGap=100)
+    lines = cv2.HoughLinesP(img_dilation, 1, np.pi / 180, threshold=800, minLineLength=500, maxLineGap=25)
     hough_image = np.zeros_like(img_dilation)
 
     if lines is not None:
