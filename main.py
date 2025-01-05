@@ -103,7 +103,7 @@ while not stop:
     binary_image = cv2.adaptiveThreshold(blur_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
 
     # Closing
-    closed_image = cv2.morphologyEx(binary_binary, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)))
+    closed_image = cv2.morphologyEx(binary_image, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)))
 
     # Canny edge detection
     canny = cv2.Canny(closed_image, 20, 255)
