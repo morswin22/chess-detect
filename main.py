@@ -198,11 +198,27 @@ while not stop:
 
         cv2.putText(bgr_image, str(index), np.array((x, y), np.uint), font, font_scale, color, thickness)
 
-    cv2.imshow("Live Stream", bgr_image)
+    if len(sorted_coordinates) != len(chess.SQUARES):
+        cv2.imshow("Live Stream", bgr_image)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            stop = True
+            break
+        continue
 
+    # Find empty and occupied squares
+    square_mask = np.zeros_like(square_marks)
+    for square in sorted_coordinates:
+        cx, cy, *_ = square
+        y_indices, x_indices = np.ogrid[:img_dilation.shape[0], :img_dilation.shape[1]]
+        distance_squared = (x_indices - cx) ** 2 + (y_indices - cy) ** 2
+        count = np.sum((distance_squared <= (x_gap*0.4) ** 2) & (img_dilation == 255))
+        if count > 1500:
+            cv2.circle(square_mask, np.array((cx, cy), np.uint), int(x_gap*0.4), (255, 255, 255), -1)
+
+    img_masked = cv2.bitwise_or(img_dilation, img_dilation, mask=square_mask)
+    cv2.imshow("Live Stream", img_masked)
     if cv2.waitKey(1) & 0xFF == ord('q'):
         stop = True
-        # cv2.imwrite("frame.png", frame)
         break
 
 capture.release()
