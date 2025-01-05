@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 import math
+from sklearn.cluster import KMeans
 
 class Livestream:
     def __init__(self, url):
@@ -206,17 +207,35 @@ while not stop:
         continue
 
     # Find empty and occupied squares
-    square_mask = np.zeros_like(square_marks)
-    for square in sorted_coordinates:
+    average_colors = dict()
+    for idx, square in enumerate(sorted_coordinates):
         cx, cy, *_ = square
         y_indices, x_indices = np.ogrid[:img_dilation.shape[0], :img_dilation.shape[1]]
         distance_squared = (x_indices - cx) ** 2 + (y_indices - cy) ** 2
         count = np.sum((distance_squared <= (x_gap*0.4) ** 2) & (img_dilation == 255))
         if count > 1500:
-            cv2.circle(square_mask, np.array((cx, cy), np.uint), int(x_gap*0.4), (255, 255, 255), -1)
+            colors_in_circle = bgr_image[distance_squared <= (x_gap*0.4) ** 2]
+            if len(colors_in_circle) > 0:
+                avg_color = np.mean(colors_in_circle, axis=0)
+                average_colors[idx] = avg_color
 
-    img_masked = cv2.bitwise_or(img_dilation, img_dilation, mask=square_mask)
-    cv2.imshow("Live Stream", img_masked)
+    # Cluster colors into "white" and "black" pieces
+    valid_colors = np.array(list(average_colors.values()))
+    square_colors = dict()
+
+    kmeans = KMeans(n_clusters=2)
+    kmeans.fit(valid_colors)
+    # (0.299*R + 0.587*G + 0.114*B)
+    luminance = [0.299*r + 0.587*g + 0.114*b for b, g, r in kmeans.cluster_centers_]
+    clustered = kmeans.predict(valid_colors)
+    for i, idx in enumerate(average_colors.keys()):
+        square_colors[idx] = clustered[i] if luminance[1] > luminance[0] else 1 - clustered[i]
+
+    for idx, color in square_colors.items():
+        text_pos = np.array((sorted_coordinates[idx][0], sorted_coordinates[idx][1] + 20), np.uint)
+        cv2.putText(bgr_image, "white" if color else "black", text_pos, font, font_scale, (255, 255, 255), thickness)
+
+    cv2.imshow("Live Stream", bgr_image)
     if cv2.waitKey(1) & 0xFF == ord('q'):
         stop = True
         break
