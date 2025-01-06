@@ -104,6 +104,8 @@ for i in chess.SQUARES:
     if piece is not None:
         board_state[board_to_image(i)] = int(piece.color)
 
+last_frame = None
+
 stop = False
 while not stop:
     ret, frame = capture.read()
@@ -111,6 +113,20 @@ while not stop:
     if not ret:
         print("Failed to grab frame")
         break
+
+    if last_frame is None:
+        last_frame = np.zeros_like(frame)
+
+    diff = cv2.absdiff(last_frame, frame)
+    _, thresh = cv2.threshold(diff, 30, 255, cv2.THRESH_BINARY)
+
+    total_pixels = thresh.size
+    differing_pixels = np.count_nonzero(thresh)
+    ratio = differing_pixels / total_pixels
+
+    last_frame = frame
+    if ratio < 1e-4:
+        continue
 
     gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     bgr_image  = frame.copy()
