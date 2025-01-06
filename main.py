@@ -247,11 +247,13 @@ while not stop:
         removed_squares = set(board_state.keys()).difference(set(new_board_state.keys()))
         intersection_keys = set(board_state.keys()).intersection(set(new_board_state.keys()))
         changed_squares = {idx for idx in intersection_keys if board_state[idx] != new_board_state[idx]}
+
         move = None
         if len(removed_squares) == len(added_squares) == 1:
             # Move
             from_, to = map(image_to_board, (removed_squares.pop(), added_squares.pop()))
             move = chess.Move.from_uci(chess.SQUARE_NAMES[from_] + chess.SQUARE_NAMES[to])
+
         elif len(removed_squares) == 2 and len(added_squares) == 1:
             # this is possibly En passant
             to_idx = added_squares.pop()
@@ -260,10 +262,12 @@ while not stop:
             from_idx = from_candidates[0] if board_state[from_candidates[0]] == color else from_candidates[1]
             from_, to = map(image_to_board, (from_idx, to_idx))
             move = chess.Move.from_uci(chess.SQAURE_NAMES[from_] + chess.SQUARE_NAMES[to])
+
         elif len(removed_squares) == 1 and len(changed_squares) == 1:
             # Capture
             from_, to = map(image_to_board, (removed_squares.pop(), changed_squares.pop()))
             move = chess.Move.from_uci(chess.SQUARE_NAMES[from_] + chess.SQUARE_NAMES[to])
+
         elif len(removed_squares) == len(added_squares) == 2:
             # this is possibly Castling
             king_square = None
@@ -288,18 +292,16 @@ while not stop:
                     move = chess.Move.from_uci(from_ + "c8")
                 elif "g8" in to_squares and "f8" in to_squares:
                     move = chess.Move.from_uci(from_ + "g8")
-        else:
-            # this is an unknown move
-            pass
-        # TODO: if pawn lands on last file => promote it to queen
+
         if move is not None:
             if move in board.legal_moves:
                 board.push(move)
                 print(move)
             else:
-                print("Illegal move")
+                print("Illegal move", move)
         else:
-            print("Unknown move")
+            print("Unknown move", removed_squares, added_squares, changed_squares)
+
         board_state = new_board_state
 
     for idx, color in new_board_state.items():
