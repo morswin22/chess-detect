@@ -1,33 +1,10 @@
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
 import math
 from sklearn.cluster import KMeans
 import chess
 
-class Livestream:
-    def __init__(self, url):
-        self.capture = cv2.VideoCapture(url)
-
-    def release(self):
-        self.capture.release()
-
-    def read(self):
-        return self.capture.read()
-
-class Image:
-    def __init__(self, path):
-        self.image = cv2.imread(path)
-
-    def release(self):
-        pass
-
-    def read(self):
-        return True, self.image
-
-# capture = Livestream("https://192.168.1.34:8080/video")
-capture = Image("frame.png")
-# capture = Image("test-10.jpeg")
+capture = cv2.VideoCapture("s_chess_6.mp4")
 
 def find_squares(image):
     board_contours, hierarchy = cv2.findContours(image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
