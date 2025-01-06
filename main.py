@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 from sklearn.cluster import KMeans
+import chess
 
 class Livestream:
     def __init__(self, url):
@@ -85,6 +86,23 @@ def find_squares(image):
 
 def lerp(a, b, t):
     return a + (b - a) * t
+
+def image_to_board(idx):
+    rank = 7 - idx % 8
+    file = idx // 8
+    return rank * 8 + file
+
+def board_to_image(i):
+    rank = 7 - i // 8
+    file = i % 8
+    return file * 8 + rank
+
+board = chess.Board()
+board_state = dict()
+for i in chess.SQUARES:
+    piece = board.piece_at(i)
+    if piece is not None:
+        board_state[board_to_image(i)] = int(piece.color)
 
 stop = False
 while not stop:
@@ -197,7 +215,7 @@ while not stop:
         color = (0, 0, 255)
         thickness = 2
 
-        cv2.putText(bgr_image, str(index), np.array((x, y), np.uint), font, font_scale, color, thickness)
+        cv2.putText(bgr_image, str(image_to_board(index)), np.array((x, y), np.uint), font, font_scale, color, thickness)
 
     if len(sorted_coordinates) != len(chess.SQUARES):
         cv2.imshow("Live Stream", bgr_image)
@@ -221,7 +239,7 @@ while not stop:
 
     # Cluster colors into "white" and "black" pieces
     valid_colors = np.array(list(average_colors.values()))
-    square_colors = dict()
+    new_board_state = dict()
 
     kmeans = KMeans(n_clusters=2)
     kmeans.fit(valid_colors)
@@ -229,11 +247,67 @@ while not stop:
     luminance = [0.299*r + 0.587*g + 0.114*b for b, g, r in kmeans.cluster_centers_]
     clustered = kmeans.predict(valid_colors)
     for i, idx in enumerate(average_colors.keys()):
-        square_colors[idx] = clustered[i] if luminance[1] > luminance[0] else 1 - clustered[i]
+        new_board_state[idx] = int(clustered[i] if luminance[1] > luminance[0] else 1 - clustered[i])
 
-    for idx, color in square_colors.items():
+    if board_state != new_board_state:
+        added_squares = set(new_board_state.keys()).difference(set(board_state.keys()))
+        removed_squares = set(board_state.keys()).difference(set(new_board_state.keys()))
+        intersection_keys = set(board_state.keys()).intersection(set(new_board_state.keys()))
+        changed_squares = {idx for idx in intersection_keys if board_state[idx] != new_board_state[idx]}
+        move = None
+        if len(removed_squares) == len(added_squares) == 1:
+            # Move
+            from_, to = map(image_to_board, (removed_squares.pop(), added_squares.pop()))
+            move = chess.Move.from_uci(chess.SQUARE_NAMES[from_] + chess.SQUARE_NAMES[to])
+        elif len(removed_squares) == 2 and len(added_squares) == 1:
+            # this is possibly En passant
+            pass # TODO: exd6e.p
+        elif len(removed_squares) == 1 and len(changed_squares) == 1:
+            # Capture
+            from_, to = map(image_to_board, (removed_squares.pop(), changed_squares.pop()))
+            move = chess.Move.from_uci(chess.SQUARE_NAMES[from_] + chess.SQUARE_NAMES[to])
+        elif len(removed_squares) == len(added_squares) == 2:
+            # this is possibly Castling
+            king_square = None
+            rook_square = None
+            for idx in removed_squares:
+                piece = board.piece_at(image_to_board(idx))
+                if piece is None:
+                    break
+                if piece.piece_type == chess.KING:
+                    king_square = idx
+                elif piece.piece_type == chess.ROOK:
+                    rook_square = idx
+
+            if king_square is not None and rook_square is not None:
+                to_squares = map(lambda idx: chess.SQUARE_NAMES[image_to_board(idx)], added_squares)
+                from_ = chess.SQUARE_NAMES[image_to_board(king_square)]
+                if "c1" in to_squares and "d1" in to_squares:
+                    move = chess.Move.from_uci(from_ + "c1")
+                elif "g1" in to_squares and "f1" in to_squares:
+                    move = chess.Move.from_uci(from_ + "g1")
+                elif "c8" in to_squares and "d8" in to_squares:
+                    move = chess.Move.from_uci(from_ + "c8")
+                elif "g8" in to_squares and "f8" in to_squares:
+                    move = chess.Move.from_uci(from_ + "g8")
+        else:
+            # this is an unknown move
+            pass
+        # TODO: if pawn lands on last file => promote it to queen
+        if move is not None:
+            if move in board.legal_moves:
+                board.push(move)
+                print(move)
+            else:
+                print("Illegal move")
+        else:
+            print("Unknown move")
+        board_state = new_board_state
+
+    for idx, color in new_board_state.items():
         text_pos = np.array((sorted_coordinates[idx][0], sorted_coordinates[idx][1] + 20), np.uint)
-        cv2.putText(bgr_image, "white" if color else "black", text_pos, font, font_scale, (255, 255, 255), thickness)
+        color = (0, 0, 0) if color else (255, 255, 255)
+        cv2.putText(bgr_image, str(board.piece_at(image_to_board(idx))), text_pos, font, font_scale, color, thickness)
 
     cv2.imshow("Live Stream", bgr_image)
     if cv2.waitKey(1) & 0xFF == ord('q'):
