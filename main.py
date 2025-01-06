@@ -254,7 +254,12 @@ while not stop:
             move = chess.Move.from_uci(chess.SQUARE_NAMES[from_] + chess.SQUARE_NAMES[to])
         elif len(removed_squares) == 2 and len(added_squares) == 1:
             # this is possibly En passant
-            pass # TODO: exd6e.p
+            to_idx = added_squares.pop()
+            color = new_board_state[to_idx]
+            from_candidates = list(removed_squares)
+            from_idx = from_candidates[0] if board_state[from_candidates[0]] == color else from_candidates[1]
+            from_, to = map(image_to_board, (from_idx, to_idx))
+            move = chess.Move.from_uci(chess.SQAURE_NAMES[from_] + chess.SQUARE_NAMES[to])
         elif len(removed_squares) == 1 and len(changed_squares) == 1:
             # Capture
             from_, to = map(image_to_board, (removed_squares.pop(), changed_squares.pop()))
