@@ -226,6 +226,14 @@ while not stop:
 
     # Sort squares
     sorted_coordinates = sorted(inside_squares, key=lambda x: x[1], reverse=True)
+
+    if len(sorted_coordinates) < 8:
+        if out is not None:
+            out.write(overlay_image(bgr_image, events_overlay))
+        if args.visualize:
+            show(square_marks)
+        continue
+
     current_group = [sorted_coordinates[0]]
     groups = list()
 
@@ -241,13 +249,6 @@ while not stop:
         group.sort(key=lambda x: x[0])
 
     sorted_coordinates = [coord for group in groups for coord in group]
-
-    if len(sorted_coordinates) < 8:
-        if out is not None:
-            out.write(overlay_image(bgr_image, events_overlay))
-        if args.visualize:
-            show(square_marks)
-        continue
 
     dxs = list()
     for i in range(len(sorted_coordinates) - 1):
