@@ -267,16 +267,34 @@ while not stop:
         continue
 
     # Fill missing squares
+    bbox = [[-float("inf"), -float("inf")], [float("inf"), float("inf")]]
+    for coord in sorted_coordinates:
+        x, y, *_ = coord
+        if x > bbox[0][0]:
+            bbox[0][0] = x
+        if x < bbox[1][0]:
+            bbox[1][0] = x
+        if y > bbox[0][1]:
+            bbox[0][1] = y
+        if y < bbox[1][1]:
+            bbox[1][1] = y
+
     for i in range(len(sorted_coordinates) - 1, 1, -1):
         x1, y1, *_ = sorted_coordinates[i-1]
         x2, y2, *_ = sorted_coordinates[i]
-        dx = x2 - x1
-        if dx < x_gap*1.5:
-            continue
-        squares_missing = dx // x_gap
-        for j in range(int(squares_missing)):
-            t = (j+1) / (squares_missing+1)
-            sorted_coordinates.insert(i, (lerp(x1, x2, t), lerp(y1, y2, t)))
+        if abs(y1 - y2) < 50:
+            dx = x2 - x1
+            if dx < x_gap*1.5:
+                continue
+            squares_missing = dx*1.05 // x_gap
+            for j in range(int(squares_missing)):
+                t = (j+1) / (squares_missing+1)
+                sorted_coordinates.insert(i, (lerp(x1, x2, t), lerp(y1, y2, t)))
+        else:
+            dx = bbox[0][0] - x1
+            squares_missing = dx*1.05 // x_gap
+            for j in range(int(squares_missing)):
+                sorted_coordinates.insert(i, (x1 + x_gap*(j+1), y1))
 
     if len(sorted_coordinates) != len(chess.SQUARES):
         if out is not None:
