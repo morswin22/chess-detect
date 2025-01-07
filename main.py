@@ -13,13 +13,13 @@ parser.add_argument("-o", "--output")
 args = parser.parse_args()
 
 capture = cv2.VideoCapture(args.filename)
+fps          = int(capture.get(cv2.CAP_PROP_FPS))
+frame_width  = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+frame_height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
 out = None
 if args.output is not None:
     fourcc = cv2.VideoWriter_fourcc(*'XVID')
-    fps          = int(capture.get(cv2.CAP_PROP_FPS))
-    frame_width  = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
-    frame_height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
     out = cv2.VideoWriter(args.output, fourcc, fps, (frame_width, frame_height))
 
 def lerp(a, b, t):
