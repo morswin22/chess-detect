@@ -22,61 +22,6 @@ if args.output is not None:
     frame_height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
     out = cv2.VideoWriter(args.output, fourcc, fps, (frame_width, frame_height))
 
-def find_squares(image):
-    board_contours, hierarchy = cv2.findContours(image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    marks = np.zeros_like(image)
-    square_centers = list()
-
-    for contour in board_contours:
-        if 2000 < cv2.contourArea(contour) < 20000:
-            epsilon = 0.02 * cv2.arcLength(contour, True)
-            approx = cv2.approxPolyDP(contour, epsilon, True)
-
-            if len(approx) == 4:
-                pts = [pt[0].tolist() for pt in approx]
-
-                # create same pattern for points, bottomright(1) , topright(2) , topleft(3) , bottomleft(4)
-                index_sorted = sorted(pts, key=lambda x: x[0], reverse=True)
-
-                if index_sorted[0][1]< index_sorted[1][1]:
-                    cur=index_sorted[0]
-                    index_sorted[0] =  index_sorted[1]
-                    index_sorted[1] = cur
-
-                if index_sorted[2][1]> index_sorted[3][1]:
-                    cur=index_sorted[2]
-                    index_sorted[2] =  index_sorted[3]
-                    index_sorted[3] = cur
-
-                # bottomright(1) , topright(2) , topleft(3) , bottomleft(4)
-                pt1=index_sorted[0]
-                pt2=index_sorted[1]
-                pt3=index_sorted[2]
-                pt4=index_sorted[3]
-
-                x, y, w, h = cv2.boundingRect(contour)
-                center_x=(x+(x+w))/2
-                center_y=(y+(y+h))/2
-
-                l1 = math.sqrt((pt1[0] - pt2[0])**2 + (pt1[1] - pt2[1])**2)
-                l2 = math.sqrt((pt2[0] - pt3[0])**2 + (pt2[1] - pt3[1])**2)
-                l3 = math.sqrt((pt3[0] - pt4[0])**2 + (pt3[1] - pt4[1])**2)
-                l4 = math.sqrt((pt1[0] - pt4[0])**2 + (pt1[1] - pt4[1])**2)
-
-                lengths = [l1, l2, l3, l4]
-                max_length = max(lengths)
-                min_length = min(lengths)
-
-                if (max_length - min_length) <= 35: # 20 for smaller boards, 50 for bigger, 35 works most of the time
-                    square_centers.append([center_x,center_y,pt1,pt2,pt3,pt4])
-
-                    cv2.line(marks, pt1, pt2, (255, 255, 0), 7)
-                    cv2.line(marks, pt2, pt3, (255, 255, 0), 7)
-                    cv2.line(marks, pt3, pt4, (255, 255, 0), 7)
-                    cv2.line(marks, pt1, pt4, (255, 255, 0), 7)
-
-    return square_centers, marks
-
 def lerp(a, b, t):
     return a + (b - a) * t
 
@@ -194,7 +139,57 @@ while not stop:
     hough_dilation = cv2.dilate(hough_image, np.ones((3, 3), np.uint8), iterations=1)
 
     # Find squares
-    square_centers, square_marks = find_squares(hough_dilation)
+    board_contours, hierarchy = cv2.findContours(hough_dilation, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    square_marks = np.zeros_like(hough_dilation)
+    square_centers = list()
+
+    for contour in board_contours:
+        if 2000 < cv2.contourArea(contour) < 20000:
+            epsilon = 0.02 * cv2.arcLength(contour, True)
+            approx = cv2.approxPolyDP(contour, epsilon, True)
+
+            if len(approx) == 4:
+                pts = [pt[0].tolist() for pt in approx]
+
+                # create same pattern for points, bottomright(1) , topright(2) , topleft(3) , bottomleft(4)
+                index_sorted = sorted(pts, key=lambda x: x[0], reverse=True)
+
+                if index_sorted[0][1]< index_sorted[1][1]:
+                    cur=index_sorted[0]
+                    index_sorted[0] =  index_sorted[1]
+                    index_sorted[1] = cur
+
+                if index_sorted[2][1]> index_sorted[3][1]:
+                    cur=index_sorted[2]
+                    index_sorted[2] =  index_sorted[3]
+                    index_sorted[3] = cur
+
+                # bottomright(1) , topright(2) , topleft(3) , bottomleft(4)
+                pt1=index_sorted[0]
+                pt2=index_sorted[1]
+                pt3=index_sorted[2]
+                pt4=index_sorted[3]
+
+                x, y, w, h = cv2.boundingRect(contour)
+                center_x=(x+(x+w))/2
+                center_y=(y+(y+h))/2
+
+                l1 = math.sqrt((pt1[0] - pt2[0])**2 + (pt1[1] - pt2[1])**2)
+                l2 = math.sqrt((pt2[0] - pt3[0])**2 + (pt2[1] - pt3[1])**2)
+                l3 = math.sqrt((pt3[0] - pt4[0])**2 + (pt3[1] - pt4[1])**2)
+                l4 = math.sqrt((pt1[0] - pt4[0])**2 + (pt1[1] - pt4[1])**2)
+
+                lengths = [l1, l2, l3, l4]
+                max_length = max(lengths)
+                min_length = min(lengths)
+
+                if (max_length - min_length) <= 35: # 20 for smaller boards, 50 for bigger, 35 works most of the time
+                    square_centers.append([center_x,center_y,pt1,pt2,pt3,pt4])
+
+                    cv2.line(square_marks, pt1, pt2, (255, 255, 0), 7)
+                    cv2.line(square_marks, pt2, pt3, (255, 255, 0), 7)
+                    cv2.line(square_marks, pt3, pt4, (255, 255, 0), 7)
+                    cv2.line(square_marks, pt1, pt4, (255, 255, 0), 7)
 
     square_marks_dilation = cv2.dilate(square_marks, np.ones((17, 17), np.uint8), iterations=1)
 
