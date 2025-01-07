@@ -1,0 +1,198 @@
+\documentclass{article}
+
+\usepackage[english]{babel}
+
+\usepackage[a4paper,top=2cm,bottom=2cm,left=3cm,right=3cm,marginparwidth=1.75cm]{geometry}
+
+% Useful packages
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage[colorlinks=true, allcolors=blue]{hyperref}
+\usepackage{multicol}
+\usepackage{subcaption}
+\usepackage{siunitx}
+\usepackage{afterpage}
+
+\newcommand\todo[1]{\textcolor{red}{\bf TODO: #1}}
+
+\title{Detection of the state of chess games}
+\author{
+  Patryk Janiak\\
+  \texttt{156053}
+  \and
+  Marek Seget\\
+  \texttt{156042}
+}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This report explores a method for detecting the state of chess games using OpenCV and a chess game state library, without employing machine learning techniques. By processing images of chessboards, we utilize contour analysis and color segmentation to identify board squares and piece positions. The system accurately interprets the state of the game, including legal moves and check conditions, demonstrating that traditional computer vision can be used effectively in this context.
+\end{abstract}
+
+\section{Introduction}
+Chess is a timeless strategic board game played between two opponents, each commanding an army of 16 pieces: one king, one queen, two rooks, two knights, two bishops, and eight pawns. The ultimate objective is to checkmate the opponent's king, placing it in a position where it cannot escape capture.
+
+The game unfolds on a square board divided into 64 tiles, where various events dictate the flow of play:
+\begin{itemize}
+\item Moving a Piece: Players advance their pieces to new squares according to specific movement rules unique to each piece.
+\item Capturing a Piece: A player eliminates an opponent's piece by landing on its square with one of their own.
+\item Checking the King: A player places the opponent's king under direct threat of capture on the next move.
+\item Checkmate: The game concludes when a player's king is in check and has no legal moves to escape, resulting in victory for the opponent.
+\item Draw: The game may end without a winner due to conditions such as insufficient material for checkmate, stalemate, or mutual agreement.
+\item Invalid Move: A player may attempt an illegal move that violates the game's rules, such as moving to an occupied square by an ally or making an improper move for that piece.
+\end{itemize}
+
+\section{Data set}
+The data set for this project is organized into three distinct groups based on the difficulty of the state detection task of the chess game. Each difficulty group contains three representative clips. The length of each clip ranges from one to five minutes, providing ample data for testing and validating the effectiveness of our chess game state detection method under varying conditions.
+
+\subsection{Easy}
+This group consists of clips captured from a perfect overhead view, ensuring that all game elements are clearly visible and unobstructed by the player's hands. Each clip in this category provides an ideal scenario for detecting board states, allowing for straightforward analysis.
+
+\subsection{Medium}
+The clips in this group introduce more challenging conditions that feature varying lighting dynamics, shadows, and light reflections that can obscure visibility. These clips simulate real-world environments where lighting may fluctuate, requiring the detection system to adapt to these changes while maintaining accuracy.
+
+\subsection{Difficult}
+The most complex clips are included in this category, which shares the lighting challenges of the medium group but also incorporates angled views and partial obstructions caused by players' hands during piece movements. In addition, slight camera shake is present, further complicating the detection process.
+
+\begin{figure}[!htbp]
+    \centering
+    \begin{minipage}{.5\textwidth}
+        \centering
+        \includegraphics[width=0.9\linewidth]{example_easy.png}
+        \caption{Example from the easy dataset}
+        \label{fig:dprob1_6_2}
+    \end{minipage}%
+    \begin{minipage}{0.5\textwidth}
+        \centering
+        \includegraphics[width=0.9\linewidth]{example_medium.png}
+        \caption{Example from the medium dataset}
+        \label{fig:dprob1_6_1}
+    \end{minipage}
+\end{figure}
+
+\section{Algorithm}
+
+The algorithm can be divided into three stages. The first two use OpenCV to find board squares, pieces, and their colors. The last stage tries to understand how the board changed between moves and propagates these changes into a chess game engine to validate the legality of the move, also the engine is then queried for checks, checkmates, and draws.
+
+\subsection{Finding the board}
+
+\subsubsection{Adaptive threshold}
+The image is turned grayscale and is slightly blurred. Then we apply adaptive Gaussian thresholding and perform closing to filter out noise.
+
+\subsubsection{Canny edge detection}
+We extract the edges of the binary image and dilate it to obtain clearer results.
+
+\subsubsection{Hough Lines}
+Then, we use Hough lines to get perpendicular lines that hopefully form the squares of the board. We draw the lines on a new empty image and dilate it to be more connected, which forms better squares.
+
+\subsubsection{Finding square contours}
+After that, we find the contours and filter out only those that are square enough. This finds all possible squares in the image, even the ones outside the board.
+
+\subsubsection{Getting the whole board}
+We dilate the image filled with squares, which we hope connects them and forms the largest contour in the image. We treat this contour as the board and filter squares that lie outside it. The squares that are left are sorted, and we try to fill in the gaps in the rows.
+
+\subsection{Determining occupied squares}
+
+\subsubsection{Counting detected edges inside squares}
+We count how many white pixels are around the centers of the squares as a result of canny edge detection. If this count is above a hand-picked threshold, we mark this square as occupied.
+
+\subsubsection{Clustering pieces by color}
+Next, we average the colors of the pixels in the original image around the centers of the squares marked occupied, which allows us to cluster them into two classes. We determine the class of white pieces by calculating the luminance of the cluster centers.
+
+$luminance = 0.299*R + 0.587*G + 0.114*B$
+
+\subsection{Analyzing the change in board state}
+
+\subsubsection{Handling moves}
+A move is detected when exactly one occupied square is removed from the old board state and exactly one occupied square is added to the new board state.
+
+\subsubsection{Handling captures}
+A capture is detected when exactly one occupied square is removed from the old board state and exactly one occupied square changes color in the new board state.
+
+\subsubsection{Handling promotion}
+The pawn promotion is detected after the pawn lands in the last file of the board. We cannot detect to which piece the pawn was promoted to; thus we decided to assume the most common situation, that of the promotion to the queen.
+
+\subsubsection{Handling castling}
+The castling is detected when exactly two occupied squares are removed from the old board state, one of them needs to be a king, and the other need to be a rook. Then we test whether it is a king-side castle or a queen-side castle.
+
+\subsubsection{Handling en passant}
+En passant is detected when exactly two occupied squares are removed from the old board state, but only one occupied square is added to the new board.
+
+\subsubsection{Handling the rest}
+All other game events (checks, checkmates, draws, illegal moves) are detected by the chess engine.
+
+\newpage
+\begin{figure}[!htbp]
+    \centering
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{threshold.png}
+        \caption{Adaptive Gaussian threshold}
+        \label{fig:th}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{edges.png}
+        \caption{Canny edges}
+        \label{fig:ed}
+    \end{subfigure}
+
+    \centering
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{hough.png}
+        \caption{Hough lines}
+        \label{fig:hou}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{squares.png}
+        \caption{Square contours}
+        \label{fig:sq}
+    \end{subfigure}
+
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{board.png}
+        \caption{Largest contour}
+        \label{fig:bo}
+    \end{subfigure}
+
+\end{figure}
+
+\newpage
+
+\section{Effectiveness on each data set}
+The effectiveness of our chess game state detection method was evaluated across three difficulty levels of the data set.
+\subsection{Easy Dataset}
+The system performed exceptionally well, accurately identifying the state of the board and movements of the pieces due to the clear overhead view and the unobstructed visibility of the pieces.
+\subsection{Medium Dataset}
+Performance decreased as varying lighting conditions, shadows, and reflections introduced challenges. Although the system maintained reasonable accuracy, it struggled with some piece recognition.
+\subsection{Difficult Dataset}
+This group presented the most challenges, with angled views, partial obstructions from the players' hands, and slight shake of the camera that significantly affected detection accuracy. Despite these difficulties, the system still provided valuable information on the states of the game.
+
+\begin{figure}[!htbp]
+    \centering
+    \begin{minipage}{.5\textwidth}
+        \centering
+        \includegraphics[width=0.9\linewidth]{result_easy.png}
+        \caption{Results from the easy dataset}
+        \label{fig:prob1_6_2}
+    \end{minipage}%
+    \begin{minipage}{0.5\textwidth}
+        \centering
+        \includegraphics[width=0.9\linewidth]{result_medium.png}
+        \caption{Results from the medium dataset}
+        \label{fig:prob1_6_1}
+    \end{minipage}
+\end{figure}
+
+\section{Analysis and Conclusions}
+The results highlight the impact of environmental factors on the performance of the detection method. Although the system excels in controlled scenarios, real-world applications present complexities that affect accuracy. The medium data set's results suggest that improvements in handling lighting variations are necessary. The challenges faced in the difficult dataset indicate a need for improved image-processing techniques to better manage occlusions and camera shake.
+In conclusion, while our method shows strong potential for detecting chess game state in ideal conditions, more research is needed to improve its robustness and adaptability in more complex environments. Future work could explore hybrid approaches that combine traditional methods with machine learning to enhance performance across all difficulty levels.
+
+\end{document}
