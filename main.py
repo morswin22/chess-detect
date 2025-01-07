@@ -116,6 +116,14 @@ def overlay_image(image, overlay):
 last_frame = np.zeros((frame_height, frame_width, 3), np.uint8)
 last_overlay = np.zeros((frame_height, frame_width, 3), np.uint8)
 
+events = dict() # frame_number: event
+frame_count = -1
+show_event_duration = 5 * fps
+
+font = cv2.FONT_HERSHEY_SIMPLEX
+font_scale = 0.5
+thickness = 2
+
 progress_bar = None if args.visualize else tqdm(total = int(capture.get(cv2.CAP_PROP_FRAME_COUNT)))
 
 while not stop:
@@ -124,6 +132,16 @@ while not stop:
     if not ret:
         print("Failed to grab frame")
         break
+
+    frame_count += 1
+    events_overlay = np.zeros((frame_height, frame_width, 3), np.uint8)
+    shown_events = 0
+    for frame_number, event in events.items():
+        if frame_count - frame_number > show_event_duration:
+            continue
+        text_pos = np.array((10, 50 + 50 * shown_events), np.uint)
+        cv2.putText(events_overlay, event, text_pos, font, font_scale * 3, (255, 0, 0), thickness * 2)
+        shown_events += 1
 
     if not args.visualize:
         progress_bar.update(1)
@@ -137,10 +155,11 @@ while not stop:
 
     last_frame = frame
     if ratio < 1e-4:
+        overlaid = overlay_image(overlay_image(frame, last_overlay), events_overlay)
         if out is not None:
-            out.write(overlay_image(frame, last_overlay))
+            out.write(overlaid)
         if args.visualize:
-            show(overlay_image(frame, last_overlay))
+            show(overlaid)
         continue
 
     gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -184,7 +203,7 @@ while not stop:
 
     if len(contours) == 0:
         if out is not None:
-            out.write(bgr_image)
+            out.write(overlay_image(bgr_image, events_overlay))
         if args.visualize:
             show(square_marks_dilation)
         continue
@@ -218,7 +237,7 @@ while not stop:
 
     if len(sorted_coordinates) < 8:
         if out is not None:
-            out.write(bgr_image)
+            out.write(overlay_image(bgr_image, events_overlay))
         if args.visualize:
             show(square_marks)
         continue
@@ -235,7 +254,7 @@ while not stop:
     x_gap = np.median(dxs)
     if math.isnan(x_gap) or int(x_gap) == 0:
         if out is not None:
-            out.write(bgr_image)
+            out.write(overlay_image(bgr_image, events_overlay))
         if args.visualize:
             show(square_marks)
         continue
@@ -254,7 +273,7 @@ while not stop:
 
     if len(sorted_coordinates) != len(chess.SQUARES):
         if out is not None:
-            out.write(bgr_image)
+            out.write(overlay_image(bgr_image, events_overlay))
         if args.visualize:
             show(square_marks)
         continue
@@ -264,13 +283,7 @@ while not stop:
     # Display squares
     for index, coord in enumerate(sorted_coordinates):
         x, y = coord[0], coord[1]
-
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 0.5
-        color = (0, 0, 255)
-        thickness = 2
-
-        cv2.putText(last_overlay, str(image_to_board(index)), np.array((x, y - 10), np.uint), font, font_scale, color, thickness)
+        cv2.putText(last_overlay, str(image_to_board(index)), np.array((x, y - 10), np.uint), font, font_scale, (0, 0, 255), thickness)
 
     # Find empty and occupied squares
     average_colors = dict()
@@ -304,14 +317,17 @@ while not stop:
         changed_squares = {idx for idx in intersection_keys if board_state[idx] != new_board_state[idx]}
 
         move = None
+        move_info = None
         if len(removed_squares) == len(added_squares) == 1 or len(removed_squares) == len(changed_squares) == 1:
             if len(removed_squares) == len(added_squares) == 1:
                 # Move
                 from_, to = map(image_to_board, (removed_squares.pop(), added_squares.pop()))
+                move_info = "Move"
 
             if len(removed_squares) == len(changed_squares) == 1:
                 # Capture
                 from_, to = map(image_to_board, (removed_squares.pop(), changed_squares.pop()))
+                move_info = "Capture"
 
             move_uci = chess.SQUARE_NAMES[from_] + chess.SQUARE_NAMES[to]
 
@@ -319,6 +335,7 @@ while not stop:
             if piece is not None and piece.piece_type == chess.PAWN and (56 <= to <= 63 or 0 <= to <= 7):
                 # Promotion
                 move_uci += "q"
+                move_info = "(Promotion) " + move_info
 
             move = chess.Move.from_uci(chess.SQUARE_NAMES[from_] + chess.SQUARE_NAMES[to])
 
@@ -330,6 +347,7 @@ while not stop:
             from_idx = from_candidates[0] if board_state[from_candidates[0]] == color else from_candidates[1]
             from_, to = map(image_to_board, (from_idx, to_idx))
             move = chess.Move.from_uci(chess.SQUARE_NAMES[from_] + chess.SQUARE_NAMES[to])
+            move_info = "En passant"
 
         elif len(removed_squares) == len(added_squares) == 2:
             # this is possibly Castling
@@ -349,17 +367,21 @@ while not stop:
                 from_ = chess.SQUARE_NAMES[image_to_board(king_square)]
                 if "c1" in to_squares and "d1" in to_squares:
                     move = chess.Move.from_uci(from_ + "c1")
+                    move_info = "Castle queenside"
                 elif "g1" in to_squares and "f1" in to_squares:
                     move = chess.Move.from_uci(from_ + "g1")
+                    move_info = "Castle kingside"
                 elif "c8" in to_squares and "d8" in to_squares:
                     move = chess.Move.from_uci(from_ + "c8")
+                    move_info = "Castle queenside"
                 elif "g8" in to_squares and "f8" in to_squares:
                     move = chess.Move.from_uci(from_ + "g8")
+                    move_info = "Castle kingside"
 
         if move is not None:
             if move in board.legal_moves:
                 board.push(move)
-                print(move)
+                events[frame_count] = move_info + ": " + str(move)
                 outcome = board.outcome()
                 if outcome is not None:
                     if outcome.winner is None:
@@ -374,12 +396,13 @@ while not stop:
                         due_to = "stalemate"
                     elif due_to == chess.Termination.INSUFFICIENT_MATERIAL:
                         due_to = "insufficient material"
-                    print(what + "Due to " + due_to)
+                    events[frame_count+1] = what + "Due to " + due_to
                 elif board.is_check():
-                    print("Check!")
+                    events[frame_count+1] = "Check!"
             else:
-                print("Illegal move", move)
+                events[frame_count] = "Illegal move: " + move_info + ": " + str(move)
         else:
+            events[frame_count] = "Unknown move"
             print("Unknown move", removed_squares, added_squares, changed_squares)
 
         board_state = new_board_state
@@ -389,12 +412,13 @@ while not stop:
         color = (1, 1, 1) if color else (255, 255, 255)
         cv2.putText(last_overlay, str(board.piece_at(image_to_board(idx))), text_pos, font, font_scale, color, thickness)
 
-    bgr_image = overlay_image(bgr_image, last_overlay)
+    bgr_image = overlay_image(overlay_image(bgr_image, last_overlay), events_overlay)
     if out is not None:
         out.write(bgr_image)
     if args.visualize:
         show(bgr_image)
 
+print(events)
 if out is not None:
     out.release()
 if not args.visualize:
