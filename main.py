@@ -123,7 +123,7 @@ while not stop:
     bgr_image  = frame.copy()
 
     # Blur
-    blur_image = cv2.GaussianBlur(gray_image, (5, 5), 0)
+    blur_image = cv2.GaussianBlur(gray_image, (7, 7), 0)
 
     # Binary tresholding
     binary_image = cv2.adaptiveThreshold(blur_image, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
@@ -138,7 +138,7 @@ while not stop:
     img_dilation = cv2.dilate(canny, np.ones((7,7), np.uint8), iterations=1)
 
     # Hough Lines
-    lines = cv2.HoughLinesP(img_dilation, 1, np.pi / 180, threshold=800, minLineLength=500, maxLineGap=25)
+    lines = cv2.HoughLinesP(img_dilation, 1, np.pi / 180, threshold=850, minLineLength=600, maxLineGap=25)
     hough_image = np.zeros_like(img_dilation)
 
     if lines is not None:
@@ -317,7 +317,7 @@ while not stop:
         y_indices, x_indices = np.ogrid[:img_dilation.shape[0], :img_dilation.shape[1]]
         distance_squared = (x_indices - cx) ** 2 + (y_indices - cy) ** 2
         count = np.sum((distance_squared <= (x_gap*0.4) ** 2) & (img_dilation == 255))
-        if count > 1500:
+        if count > 800:
             colors_in_circle = bgr_image[distance_squared <= (x_gap*0.4) ** 2]
             if len(colors_in_circle) > 0:
                 avg_color = np.mean(colors_in_circle, axis=0)
