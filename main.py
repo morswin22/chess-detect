@@ -3,8 +3,24 @@ import numpy as np
 import math
 from sklearn.cluster import KMeans
 import chess
+import argparse
+from tqdm import tqdm
 
-capture = cv2.VideoCapture("s_chess_6.mp4")
+parser = argparse.ArgumentParser()
+parser.add_argument("filename")
+parser.add_argument("-v", "--visualize", action="store_true")
+parser.add_argument("-o", "--output")
+args = parser.parse_args()
+
+capture = cv2.VideoCapture(args.filename)
+
+out = None
+if args.output is not None:
+    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+    fps          = int(capture.get(cv2.CAP_PROP_FPS))
+    frame_width  = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    out = cv2.VideoWriter(args.output, fourcc, fps, (frame_width, frame_height))
 
 def find_squares(image):
     board_contours, hierarchy = cv2.findContours(image, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -84,6 +100,24 @@ for i in chess.SQUARES:
 last_frame = None
 
 stop = False
+
+def show(image):
+    global stop
+    cv2.imshow("Visualize", image)
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        stop = True
+
+def overlay_image(image, overlay):
+    mask = np.any(overlay != [0, 0, 0], axis=-1)
+    background = image.copy()
+    background[mask] = overlay[mask]
+    return background
+
+last_frame = np.zeros((frame_height, frame_width, 3), np.uint8)
+last_overlay = np.zeros((frame_height, frame_width, 3), np.uint8)
+
+progress_bar = None if args.visualize else tqdm(total = int(capture.get(cv2.CAP_PROP_FRAME_COUNT)))
+
 while not stop:
     ret, frame = capture.read()
 
@@ -91,8 +125,8 @@ while not stop:
         print("Failed to grab frame")
         break
 
-    if last_frame is None:
-        last_frame = np.zeros_like(frame)
+    if not args.visualize:
+        progress_bar.update(1)
 
     diff = cv2.absdiff(last_frame, frame)
     _, thresh = cv2.threshold(diff, 30, 255, cv2.THRESH_BINARY)
@@ -103,6 +137,10 @@ while not stop:
 
     last_frame = frame
     if ratio < 1e-4:
+        if out is not None:
+            out.write(overlay_image(frame, last_overlay))
+        if args.visualize:
+            show(overlay_image(frame, last_overlay))
         continue
 
     gray_image = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -145,6 +183,10 @@ while not stop:
     contours, _ = cv2.findContours(square_marks_dilation, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     if len(contours) == 0:
+        if out is not None:
+            out.write(bgr_image)
+        if args.visualize:
+            show(square_marks_dilation)
         continue
 
     largest_contour = max(contours, key=cv2.contourArea)
@@ -174,6 +216,13 @@ while not stop:
 
     sorted_coordinates = [coord for group in groups for coord in group]
 
+    if len(sorted_coordinates) < 8:
+        if out is not None:
+            out.write(bgr_image)
+        if args.visualize:
+            show(square_marks)
+        continue
+
     dxs = list()
     for i in range(len(sorted_coordinates) - 1):
         x1, y1, *_ = sorted_coordinates[i]
@@ -185,6 +234,10 @@ while not stop:
 
     x_gap = np.median(dxs)
     if math.isnan(x_gap) or int(x_gap) == 0:
+        if out is not None:
+            out.write(bgr_image)
+        if args.visualize:
+            show(square_marks)
         continue
 
     # Fill missing squares
@@ -199,6 +252,15 @@ while not stop:
             t = (j+1) / (squares_missing+1)
             sorted_coordinates.insert(i, (lerp(x1, x2, t), lerp(y1, y2, t)))
 
+    if len(sorted_coordinates) != len(chess.SQUARES):
+        if out is not None:
+            out.write(bgr_image)
+        if args.visualize:
+            show(square_marks)
+        continue
+
+    last_overlay = np.zeros((frame_height, frame_width, 3), np.uint8)
+
     # Display squares
     for index, coord in enumerate(sorted_coordinates):
         x, y = coord[0], coord[1]
@@ -208,14 +270,7 @@ while not stop:
         color = (0, 0, 255)
         thickness = 2
 
-        cv2.putText(bgr_image, str(image_to_board(index)), np.array((x, y), np.uint), font, font_scale, color, thickness)
-
-    if len(sorted_coordinates) != len(chess.SQUARES):
-        cv2.imshow("Live Stream", bgr_image)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            stop = True
-            break
-        continue
+        cv2.putText(last_overlay, str(image_to_board(index)), np.array((x, y - 10), np.uint), font, font_scale, color, thickness)
 
     # Find empty and occupied squares
     average_colors = dict()
@@ -260,7 +315,8 @@ while not stop:
 
             move_uci = chess.SQUARE_NAMES[from_] + chess.SQUARE_NAMES[to]
 
-            if board.piece_at(from_).piece_type == chess.PAWN and (56 <= to <= 63 or 0 <= to <= 7):
+            piece = board.piece_at(from_)
+            if piece is not None and piece.piece_type == chess.PAWN and (56 <= to <= 63 or 0 <= to <= 7):
                 # Promotion
                 move_uci += "q"
 
@@ -312,15 +368,20 @@ while not stop:
         board_state = new_board_state
 
     for idx, color in new_board_state.items():
-        text_pos = np.array((sorted_coordinates[idx][0], sorted_coordinates[idx][1] + 20), np.uint)
-        color = (0, 0, 0) if color else (255, 255, 255)
-        cv2.putText(bgr_image, str(board.piece_at(image_to_board(idx))), text_pos, font, font_scale, color, thickness)
+        text_pos = np.array((sorted_coordinates[idx][0], sorted_coordinates[idx][1] + 10), np.uint)
+        color = (1, 1, 1) if color else (255, 255, 255)
+        cv2.putText(last_overlay, str(board.piece_at(image_to_board(idx))), text_pos, font, font_scale, color, thickness)
 
-    cv2.imshow("Live Stream", bgr_image)
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        stop = True
-        break
+    bgr_image = overlay_image(bgr_image, last_overlay)
+    if out is not None:
+        out.write(bgr_image)
+    if args.visualize:
+        show(bgr_image)
 
+if out is not None:
+    out.release()
+if not args.visualize:
+    progress_bar.close()
 capture.release()
 cv2.destroyAllWindows()
 
