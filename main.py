@@ -241,7 +241,7 @@ while not stop:
     for i in range(len(sorted_coordinates) - 1):
         x1, y1, *_ = sorted_coordinates[i]
         x2, y2, *_ = sorted_coordinates[i+1]
-        dx = x2 - x1
+        dx = abs(x2 - x1)
         if dx < 0:
             continue
         dxs.append(dx)
