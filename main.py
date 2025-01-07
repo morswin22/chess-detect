@@ -42,6 +42,15 @@ for i in chess.SQUARES:
     if piece is not None:
         board_state[board_to_image(i)] = int(piece.color)
 
+def get_number_of_pieces(board_state):
+    white, black = 0, 0
+    for idx, color in board_state.items():
+        if color == chess.WHITE:
+            white += 1
+        elif color == chess.BLACK:
+            black += 1
+    return white, black
+
 last_frame = None
 
 stop = False
@@ -87,6 +96,9 @@ while not stop:
         text_pos = np.array((10, 50 + 50 * shown_events), np.uint)
         cv2.putText(events_overlay, event, text_pos, font, font_scale * 3, (255, 0, 0), thickness * 2)
         shown_events += 1
+
+    white_count, black_count = get_number_of_pieces(board_state)
+    cv2.putText(events_overlay, f"Number of pieces {black_count} : {white_count}", np.array((frame_width - 450, 30), np.uint), font, font_scale * 2, (255, 0, 0), thickness)
 
     if not args.visualize:
         progress_bar.update(1)
