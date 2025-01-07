@@ -360,6 +360,23 @@ while not stop:
             if move in board.legal_moves:
                 board.push(move)
                 print(move)
+                outcome = board.outcome()
+                if outcome is not None:
+                    if outcome.winner is None:
+                        what = "Draw! "
+                    else:
+                        who = "White" if outcome.winner == chess.WHITE else "Black"
+                        what = who + " won! "
+                    due_to = outcome.termination
+                    if due_to == chess.Termination.CHECKMATE:
+                        due_to = "checkmate"
+                    elif due_to == chess.Termination.STALEMATE:
+                        due_to = "stalemate"
+                    elif due_to == chess.Termination.INSUFFICIENT_MATERIAL:
+                        due_to = "insufficient material"
+                    print(what + "Due to " + due_to)
+                elif board.is_check():
+                    print("Check!")
             else:
                 print("Illegal move", move)
         else:
