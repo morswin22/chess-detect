@@ -217,10 +217,6 @@ while not stop:
 
     largest_contour = max(contours, key=cv2.contourArea)
 
-    biggest_area_image = np.zeros_like(square_marks_dilation)
-
-    cv2.drawContours(biggest_area_image, largest_contour, -1, (255,255,255), 10)
-
     # Filter squares that are outside the biggest contour
     inside_squares=[square for square in square_centers if cv2.pointPolygonTest(largest_contour, (square[0], square[1]), measureDist=False) >= 0]
 
